@@ -5,9 +5,10 @@ name: hey-claudex
 # instead of wherever your first message of the day happens to land it.
 #
 # This is deliberately NOT "chain a warm-up every 5 hours around the clock" -
-# it targets fixed times you choose. See README.md "Adjusting your schedule"
-# before you rely on this: the cron lines below are placeholders expressed as
-# if your peak hours were UTC+0. Convert them to YOUR timezone first.
+# it targets fixed times you choose. The cron lines below are UTC times
+# already converted for one specific timezone's peak hours - if you're
+# deploying this somewhere else, re-convert them for your own timezone
+# first. See README.md "Adjusting your schedule" for the how-to.
 #
 # Auth: subscription OAuth only, no API keys.
 #   - Claude: CLAUDE_CODE_OAUTH_TOKEN  (from `claude setup-token`)
@@ -18,13 +19,11 @@ name: hey-claudex
 
 on:
   schedule:
-    # EDIT ME - convert each to your own local peak hours in UTC.
-    # Defaults below assume the peak-hour targets are 10:00, 15:00, 20:00 and
-    # 01:00 local, reached by waking 5h before each (see README for the why).
-    - cron: "59 4 * * *"   # -> local reset ~10:00 (first peak)
-    - cron: "0 10 * * *"   # -> local reset ~15:00 (second peak)
-    - cron: "1 15 * * *"   # -> local reset ~20:00 (third peak)
-    - cron: "2 20 * * *"   # -> local reset ~01:00 (wind-down)
+    # Times are UTC - see the top-of-file note before editing these.
+    - cron: "59 20 * * *"  # local reset ~10:00 (first peak)
+    - cron: "0 2 * * *"    # local reset ~15:00 (second peak)
+    - cron: "1 7 * * *"    # local reset ~20:00 (third peak)
+    - cron: "2 12 * * *"   # local reset ~01:00 (wind-down)
     # Optional 5th slot for regular daytime automation work - uncomment and
     # adjust if you want it (see README tip on avoiding cycle collisions):
     # - cron: "30 11 * * *"

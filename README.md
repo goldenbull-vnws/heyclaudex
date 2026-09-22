@@ -163,6 +163,11 @@ cycle starts, add a 5th wake around 11:30am so it winds down by ~1am without
 colliding with the following day's first window. There's a commented-out
 example slot in `warm.yml` for this.
 
+> This copy's `warm.yml` already has the four targets above converted to UTC
+> for one specific timezone, and only the Claude backend is active
+> (`CODEX_AUTH_JSON` isn't set). If you use this repo as a template, re-convert
+> the cron lines for **your own** timezone first - see below.
+
 Convert each local time to UTC (e.g. via
 [crontab.guru](https://crontab.guru) or `TZ=UTC date -d '10:00 -0800'`) and
 replace the placeholder `- cron:` lines. Note: the window anchors to the
