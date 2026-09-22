@@ -176,6 +176,40 @@ target times.
 
 ---
 
+## Pausing or removing it
+
+**Pause everything (reversible, instant):**
+
+```bash
+gh workflow disable warm.yml --repo <you>/<your-repo>
+```
+
+No more scheduled or manual runs until you turn it back on with
+`gh workflow enable warm.yml --repo <you>/<your-repo>`. Nothing is deleted -
+secrets, schedule, and history all stay put.
+
+**Turn off just one backend**, leaving the other running:
+
+```bash
+gh secret delete CLAUDE_CODE_OAUTH_TOKEN --repo <you>/<your-repo>   # or
+gh secret delete CODEX_AUTH_JSON --repo <you>/<your-repo>
+```
+
+The `detect` job skips that provider's job on the next run once its secret is
+gone.
+
+**Full teardown:**
+
+1. Delete the secrets (commands above, both if applicable).
+2. Revoke the underlying token(s) - deleting the secret only removes it from
+   GitHub, it doesn't invalidate the token itself:
+   - Claude: `claude.ai/settings/claude-code`
+   - Codex: revoke via your ChatGPT account's connected-apps/security
+     settings
+3. Optionally delete the repo entirely: `gh repo delete <you>/<your-repo>`.
+
+---
+
 ## FAQ
 
 **I have both a Claude and a Codex subscription (and both CLIs installed) -
