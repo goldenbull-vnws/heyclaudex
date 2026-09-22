@@ -40,8 +40,27 @@ env:
   CODEX_CLI_VERSION: "0.155.1"
 
 jobs:
+  # GitHub Actions rejects `secrets` directly inside a job-level `if:`
+  # ("Unrecognized named-value: 'secrets'"), so backend detection has to
+  # happen in a step (where secrets ARE allowed) and get exposed as a job
+  # output, which job-level `if:` CAN reference via `needs.*.outputs.*`.
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      claude_enabled: ${{ steps.check.outputs.claude_enabled }}
+      codex_enabled: ${{ steps.check.outputs.codex_enabled }}
+    steps:
+      - id: check
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: |
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then echo "claude_enabled=true" >> "$GITHUB_OUTPUT"; else echo "claude_enabled=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$CODEX_AUTH_JSON" ]; then echo "codex_enabled=true" >> "$GITHUB_OUTPUT"; else echo "codex_enabled=false" >> "$GITHUB_OUTPUT"; fi
+
   warm-claude:
-    if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+    needs: detect
+    if: needs.detect.outputs.claude_enabled == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -97,7 +116,8 @@ jobs:
         run: ./scripts/send-claude.sh
 
   warm-codex:
-    if: ${{ secrets.CODEX_AUTH_JSON != '' }}
+    needs: detect
+    if: needs.detect.outputs.codex_enabled == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
