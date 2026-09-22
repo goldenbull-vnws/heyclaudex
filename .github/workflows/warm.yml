@@ -1,0 +1,256 @@
+name: hey-claudex
+
+# Fires a trivial wake prompt to Claude and/or Codex at specific clock times,
+# so each account's rolling 5-hour usage window resets at YOUR peak hours
+# instead of wherever your first message of the day happens to land it.
+#
+# This is deliberately NOT "chain a warm-up every 5 hours around the clock" -
+# it targets fixed times you choose. See README.md "Adjusting your schedule"
+# before you rely on this: the cron lines below are placeholders expressed as
+# if your peak hours were UTC+0. Convert them to YOUR timezone first.
+#
+# Auth: subscription OAuth only, no API keys.
+#   - Claude: CLAUDE_CODE_OAUTH_TOKEN  (from `claude setup-token`)
+#   - Codex:  CODEX_AUTH_JSON          (contents of ~/.codex/auth.json after `codex login`)
+# Only set the secret(s) for the backend(s) you want active - each job below
+# no-ops if its secret is missing, so having both CLIs installed locally does
+# NOT force both jobs to run. See README FAQ.
+
+on:
+  schedule:
+    # EDIT ME - convert each to your own local peak hours in UTC.
+    # Defaults below assume the peak-hour targets are 10:00, 15:00, 20:00 and
+    # 01:00 local, reached by waking 5h before each (see README for the why).
+    - cron: "59 4 * * *"   # -> local reset ~10:00 (first peak)
+    - cron: "0 10 * * *"   # -> local reset ~15:00 (second peak)
+    - cron: "1 15 * * *"   # -> local reset ~20:00 (third peak)
+    - cron: "2 20 * * *"   # -> local reset ~01:00 (wind-down)
+    # Optional 5th slot for regular daytime automation work - uncomment and
+    # adjust if you want it (see README tip on avoiding cycle collisions):
+    # - cron: "30 11 * * *"
+  workflow_dispatch: {}      # manual "Run workflow" button - always sends for real
+
+permissions:
+  contents: read
+
+env:
+  # Pinned CLI versions - last verified working. Bump deliberately, then run
+  # `gh workflow run warm.yml` once and confirm green before trusting it.
+  CLAUDE_CLI_VERSION: "2.1.278"
+  CODEX_CLI_VERSION: "0.155.1"
+
+jobs:
+  warm-claude:
+    if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if a window is already running
+        id: check
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run - sending regardless of window state."
+            echo "send=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          usage=$(curl -sf --max-time 30 https://api.anthropic.com/api/oauth/usage \
+            -H "Authorization: Bearer $CLAUDE_CODE_OAUTH_TOKEN" \
+            -H "anthropic-beta: oauth-2025-04-20" || true)
+
+          if printf '%s' "$usage" | jq -e '.five_hour' >/dev/null 2>&1; then
+            resets_at=$(printf '%s' "$usage" | jq -r '.five_hour.resets_at // empty')
+            reset_epoch=0
+            case "$resets_at" in
+              ('') reset_epoch=0 ;;
+              (*[!0-9]*) reset_epoch=$(date -u -d "$resets_at" +%s 2>/dev/null || echo 0) ;;
+              (*) reset_epoch=$resets_at ;;
+            esac
+            if [ "$reset_epoch" -gt "$(date +%s)" ]; then
+              echo "Window already active until $resets_at - skipping, this send would be wasted."
+              echo "send=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            echo "Live meter unavailable - sending anyway (fail open at a targeted slot)."
+          fi
+          echo "send=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.send == 'true'
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        if: steps.check.outputs.send == 'true'
+        run: npm install -g "@anthropic-ai/claude-code@${CLAUDE_CLI_VERSION}"
+
+      - name: Send wake prompt
+        if: steps.check.outputs.send == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: ./scripts/send-claude.sh
+
+  warm-codex:
+    if: ${{ secrets.CODEX_AUTH_JSON != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_PAT: ${{ secrets.GH_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Codex auth
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: |
+          mkdir -p "$HOME/.codex"
+          printf '%s' "$CODEX_AUTH_JSON" > "$HOME/.codex/auth.json"
+          chmod 600 "$HOME/.codex/auth.json"
+
+      - name: Check if a window is already running
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run - sending regardless of window state."
+            echo "send=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          usage=$(curl -sf --max-time 30 https://chatgpt.com/backend-api/wham/usage \
+            -H "Authorization: Bearer $(jq -r '.tokens.access_token' "$HOME/.codex/auth.json")" \
+            -H "chatgpt-account-id: $(jq -r '.tokens.account_id' "$HOME/.codex/auth.json")" || true)
+
+          if printf '%s' "$usage" | jq -e '.rate_limit.primary_window.reset_after_seconds' >/dev/null 2>&1; then
+            reset_after=$(printf '%s' "$usage" | jq -r '.rate_limit.primary_window.reset_after_seconds')
+            window=$(printf '%s' "$usage" | jq -r '.rate_limit.primary_window.limit_window_seconds // 18000')
+            if [ "$reset_after" -lt $((window - 120)) ]; then
+              echo "Window already active (resets in ${reset_after}s) - skipping, this send would be wasted."
+              echo "send=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            echo "Live meter unavailable - sending anyway (fail open at a targeted slot)."
+          fi
+          echo "send=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.send == 'true'
+        with:
+          node-version: "20"
+
+      - name: Install Codex CLI
+        if: steps.check.outputs.send == 'true'
+        run: npm install -g "@openai/codex@${CODEX_CLI_VERSION}"
+
+      - name: Send wake prompt
+        if: steps.check.outputs.send == 'true'
+        run: ./scripts/send-codex.sh
+
+      - name: Persist refreshed auth back to secret (best-effort)
+        # Codex refresh tokens rotate on every use. Without writing the
+        # rotated token back, CI's session eventually goes stale (observed:
+        # ~30h on an ephemeral runner). Needs an optional GH_PAT secret with
+        # "Secrets: read/write" on this repo.
+        if: ${{ steps.check.outputs.send == 'true' && env.GH_PAT != '' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ env.GH_PAT }}
+        run: |
+          gh secret set CODEX_AUTH_JSON \
+            --repo "${{ github.repository }}" \
+            --body "$(cat "$HOME/.codex/auth.json")"
+
+  notify:
+    needs: [warm-claude, warm-codex]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      CLAUDE_FAILED: ${{ needs.warm-claude.result == 'failure' }}
+      CODEX_FAILED: ${{ needs.warm-codex.result == 'failure' }}
+    steps:
+      - name: Open or update failure issue
+        if: env.CLAUDE_FAILED == 'true' || env.CODEX_FAILED == 'true'
+        run: |
+          title="HeyClaudex needs attention"
+          existing=$(gh issue list --repo "$REPO" --state open --json number,title \
+            --jq '[.[] | select(.title=="'"$title"'")][0].number // empty')
+
+          body="Automated wake-up failed after 3 retries. Failed run: $RUN_URL"$'\n\n'
+
+          if [ "$CLAUDE_FAILED" = "true" ]; then
+            body+="### Claude"$'\n'
+            body+='Likely an expired/revoked OAuth token. Fix (run in your own terminal):'$'\n'
+            body+='```bash'$'\n'
+            body+='claude setup-token'$'\n'
+            body+="gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo $REPO"$'\n'
+            body+='```'$'\n\n'
+          fi
+
+          if [ "$CODEX_FAILED" = "true" ]; then
+            body+="### Codex"$'\n'
+            body+='Session is dead (OpenAI issues one refresh-token family per account - a local `codex login` after the one below will revoke this). Fix (run in your own terminal):'$'\n'
+            body+='```bash'$'\n'
+            body+='codex login'$'\n'
+            body+="gh secret set CODEX_AUTH_JSON --repo $REPO < ~/.codex/auth.json"$'\n'
+            body+='```'$'\n\n'
+            body+='Do not run `codex login` again after that on any other machine - it revokes the session you just uploaded. See README FAQ.'$'\n\n'
+          fi
+
+          body+="This issue closes automatically the next time both jobs succeed."
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$title" --body "$body"
+          fi
+
+      - name: Close resolved failure issue
+        if: env.CLAUDE_FAILED == 'false' && env.CODEX_FAILED == 'false'
+        run: |
+          title="HeyClaudex needs attention"
+          existing=$(gh issue list --repo "$REPO" --state open --json number,title \
+            --jq '[.[] | select(.title=="'"$title"'")][0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --repo "$REPO" \
+              --comment "Resolved - a subsequent run succeeded. Closing automatically."
+          fi
+
+  heartbeat:
+    needs: [warm-claude, warm-codex]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Commit timestamp (once per day)
+        # GitHub auto-disables scheduled workflows after 60 days without
+        # repository activity. This daily no-op commit prevents that.
+        run: |
+          today=$(date -u +%F)
+          if [ "$(cut -c1-10 heartbeat.txt 2>/dev/null)" = "$today" ]; then
+            echo "Heartbeat already committed today ($today) - skipping."
+            exit 0
+          fi
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > heartbeat.txt
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add heartbeat.txt
+          git commit -m "chore: heartbeat $(cat heartbeat.txt)" || exit 0
+          for i in 1 2 3; do
+            git pull --rebase --autostash && git push && break
+            sleep $((RANDOM % 5 + 1))
+          done

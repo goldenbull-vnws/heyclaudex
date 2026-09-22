@@ -1,0 +1,8 @@
+# local credentials - never commit these
+auth.json
+.env
+*.token
+
+# OS cruft
+.DS_Store
+Thumbs.db
