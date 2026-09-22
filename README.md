@@ -155,7 +155,7 @@ peak and the last one clears out of the way before the next natural cycle:
 |---|---|---|
 | ~4:59am | ~10:00am | first peak - mid-morning, fully in work mode |
 | ~10:00am | ~3:00pm | second peak - after lunch |
-| ~3:01pm | ~8:00pm | third peak - after resting off the food coma |
+| ~3:01pm | ~8:00pm | third peak - after dinner |
 | ~8:02pm | ~1:00am | wind-down - last stretch of the day |
 
 **Tip:** if you have regular automation work that should stop before the next
