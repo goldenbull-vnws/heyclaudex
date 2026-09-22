@@ -6,13 +6,15 @@
 # IMPORTANT: must use a model that actually registers on the account's 5-hour
 # meter. "mini" models bill a separate bucket and never start a window, even
 # though the send succeeds and returns a reply — see README FAQ.
+#
+# --ephemeral: this run leaves no session file and nothing to resume/list.
 set -euo pipefail
 
 MODEL="${HEYCLAUDEX_CODEX_MODEL:-gpt-5.6-sol}"
 EFFORT="${HEYCLAUDEX_CODEX_REASONING_EFFORT:-low}"
 
 for attempt in 1 2 3; do
-  if codex exec --skip-git-repo-check -m "$MODEL" \
+  if codex exec --skip-git-repo-check --ephemeral -m "$MODEL" \
       -c model_reasoning_effort="$EFFORT" "Hey Codex"; then
     exit 0
   fi

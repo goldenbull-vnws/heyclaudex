@@ -2,12 +2,17 @@
 # Sends one minimal-token wake prompt to Claude to anchor a fresh 5-hour
 # usage window at the moment this script runs. Requires CLAUDE_CODE_OAUTH_TOKEN
 # in the environment (from `claude setup-token`).
+#
+# --no-session-persistence: this run leaves no session to resume and no
+# entry in your chat/session history. (The setup-token OAuth token is also
+# scoped to `user:inference` only - it structurally can't write session
+# history even without this flag - but it's set explicitly for certainty.)
 set -euo pipefail
 
 MODEL="${HEYCLAUDEX_CLAUDE_MODEL:-claude-haiku-4-5-20251001}"
 
 for attempt in 1 2 3; do
-  if claude -p "Hey Claude" --model "$MODEL"; then
+  if claude -p "Hey Claude" --model "$MODEL" --no-session-persistence; then
     exit 0
   fi
   echo "Attempt $attempt failed, retrying in 10s..." >&2
