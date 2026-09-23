@@ -20,10 +20,17 @@ name: hey-claudex
 on:
   schedule:
     # Times are UTC - see the top-of-file note before editing these.
-    - cron: "59 20 * * *"  # local reset ~10:00 (first peak)
-    - cron: "0 2 * * *"    # local reset ~15:00 (second peak)
-    - cron: "1 7 * * *"    # local reset ~20:00 (third peak)
-    - cron: "2 12 * * *"   # local reset ~01:00 (wind-down)
+    #
+    # Minutes are deliberately off the hour (not :00/:59/:01/:02). GitHub
+    # delays or silently drops scheduled runs most often right at the top of
+    # the hour, when load across all of GitHub Actions peaks - see README
+    # FAQ "Will rate-limit policies... change?" and the note on scheduling
+    # reliability. Each slot below stays within ~10 min of its original
+    # target time.
+    - cron: "53 20 * * *"  # local reset ~09:53 (first peak)
+    - cron: "7 2 * * *"    # local reset ~15:07 (second peak)
+    - cron: "8 7 * * *"    # local reset ~20:08 (third peak)
+    - cron: "11 12 * * *"  # local reset ~01:11 (wind-down)
     # Optional 5th slot for regular daytime automation work - uncomment and
     # adjust if you want it (see README tip on avoiding cycle collisions):
     # - cron: "30 11 * * *"
