@@ -30,7 +30,7 @@ on:
     - cron: "50 20 * * *"  # local reset ~09:50 (first peak)
     - cron: "6 2 * * *"    # local reset ~15:06 (second peak)
     - cron: "10 7 * * *"   # local reset ~20:10 (third peak)
-    - cron: "30 12 * * *"  # TEMP one-night test slot, revert to "20 12 * * *" after tonight - local reset ~01:30 (wind-down)
+    - cron: "20 12 * * *"  # local reset ~01:20 (wind-down)
     # Optional 5th slot for regular daytime automation work - uncomment and
     # adjust if you want it (see README tip on avoiding cycle collisions):
     # - cron: "30 11 * * *"
