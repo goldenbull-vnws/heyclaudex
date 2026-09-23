@@ -153,10 +153,10 @@ peak and the last one clears out of the way before the next natural cycle:
 
 | Wake fires (local) | Window resets (local) | Why |
 |---|---|---|
-| ~4:53am | ~9:53am | first peak - mid-morning, fully in work mode |
-| ~10:07am | ~3:07pm | second peak - after lunch |
-| ~3:08pm | ~8:08pm | third peak - after dinner |
-| ~8:11pm | ~1:11am | wind-down - last stretch of the day |
+| ~4:50am | ~9:50am | first peak - mid-morning, fully in work mode |
+| ~10:06am | ~3:06pm | second peak - after lunch |
+| ~3:10pm | ~8:10pm | third peak - after dinner |
+| ~8:20pm | ~1:20am | wind-down - last stretch of the day |
 
 **Note on minutes:** the cron lines deliberately avoid the top of the hour
 (`:00`, `:59`, `:01`, `:02`) - GitHub Actions' own docs warn that scheduled
